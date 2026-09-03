@@ -7,7 +7,9 @@
 - `flowstart/hermes-skills`（私有）= 业务 skill 的**内容真源**
 - 本仓库 = **引导 + 运维规范**（怎么接入、怎么装、怎么改、有哪些坑）
 
-## 快速接入（本机已配 gh 凭据时）
+## 快速接入
+
+> **权限现状**：本仓库已**公开**（匿名可读/clone）；内容仓库 `flowstart/hermes-skills` 仍是**私有**——装它需要 GitHub 凭据，服务器上推荐下面的设备码自助授权。
 
 ```bash
 hermes skills tap add flowstart/hermes-skill-sync
@@ -28,7 +30,7 @@ SKILL.md 是开放约定（Anthropic Agent Skills 同源格式），其他 agent
 | **Codex / 其他无技能机制的 agent** | 不用装——直接把 `skills/hermes-skill-sync/SKILL.md` 当 runbook 读，照着执行（命令是普通 shell + git） |
 | **任何 agent** | 内容 skill 的 `scripts/` 都是纯 Python/CLI，跨 agent 通用；唯一 agent 特有的是 `hermes skills …` 管理命令，其他 agent 用 `git clone` + 手动拷贝等价替代 |
 
-**前提**：仓库是私有的，对方机器需先 `gh auth login`（或配 PAT）。把本仓库转公开可免去这一步（本仓库不含任何密钥）。
+**权限现状**：本仓库已公开（匿名可 clone/读）；内容仓库 `flowstart/hermes-skills` 仍是私有——装它需要凭据，服务器上推荐 `gh auth login` **设备码自助授权**：agent 在服务器跑登录命令 → 屏幕出 8 位码 → 用户手机打开 https://github.com/login/device 输码确认（约 30 秒，全程不用碰 token 文件）。
 
 ## 仓库结构
 

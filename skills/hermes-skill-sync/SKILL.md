@@ -11,16 +11,20 @@ description: 自建 skill 统一源的分发与运维指南（引导 skill）。
 
 | 仓库 | 角色 | 内容 |
 |---|---|---|
-| `flowstart/hermes-skill-sync`（本仓库） | **引导 + 规范** | 本 skill：接入方法、运维规范、坑清单 |
-| `flowstart/hermes-skills`（私有） | **内容真源** | 实际的业务 skill（如抖音博主蒸馏套件） |
+| `flowstart/hermes-skill-sync`（本仓库，**public**） | **引导 + 规范** | 本 skill：接入方法、运维规范、坑清单 |
+| `flowstart/hermes-skills`（**private**） | **内容真源** | 实际的业务 skill（如抖音博主蒸馏套件） |
 
 两个仓库都要 `tap add`（见下）。skill 的**修改只发生在本地工作副本 → push**，各端只 `update`，**严禁直接改安装拷贝**（会被下次 update 覆盖）。
 
 ## 二、新机器接入（Runbook）
 
 ```bash
-# 0. 前提：Hermes 已装（hermes --version 可用）；GitHub 凭据已配
-#    推荐本机终端 gh auth login（keyring 认证，私有仓库必需）
+# 0. 前提：Hermes 已装（hermes --version 可用）；GitHub 凭据（内容仓库私有，必需）
+#    无凭据时的自助授权路径（服务器首选，用户全程不用碰 token 文件）：
+#      gh auth login        # 选 GitHub.com → HTTPS → "Login with a web browser"
+#      屏幕显示 8 位码 → 让用户手机打开 https://github.com/login/device 输码确认
+#    本机已有 gh keyring 时此步自动通过（gh auth token 会被 Hermes 直接读取）
+#    也可用 fine-grained PAT：只勾两个仓库 + Contents:Read，写入 ~/.hermes/.env 的 GH_TOKEN=（值填你的token）
 #    国内服务器先确认 curl -I https://api.github.com 通（不通先配代理）
 
 # 1. 挂载两个源
@@ -67,7 +71,7 @@ git add -A && git commit -m "feat: xxx" && git push
 
 1. **tap 只扫 `skills/` 下的一级目录**——skill 放仓库根目录、或再嵌套类别子目录，都扫不到。
 2. **tap 安装是拷贝不是链接**——没有自动同步，分叉要靠"改源→push→各端 update"治理。
-3. **私有仓库凭据**——raw.githubusercontent.com 直链安装对私有仓库**不可靠**（无鉴权会 404），私有源一律走 `tap add`（走本机 gh/keyring 鉴权）+ 按 identifier 安装。
+3. **私有仓库凭据**——raw.githubusercontent.com 直链安装对私有仓库**不可靠**（无鉴权会 404），私有源一律走 `tap add`（走本机 gh/keyring 鉴权）+ 按 identifier 安装。（本引导仓库已公开，raw 直链对它有效；内容仓库私有，照此办理。）
 4. **profile 是独立拷贝**——装到全局层不等于 profile 能用，跨 profile 要 `hermes -p <名> skills install …`。
 5. **装了 ≠ 能跑**——密钥类配置是机器级的，见"运行依赖"。
 6. **安全边界**——community 来源先 `hermes skills inspect` 再装，别随手 `--force`；危险命令还有审批模式兜底。

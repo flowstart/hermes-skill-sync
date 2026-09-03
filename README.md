@@ -1,45 +1,46 @@
 # hermes-skill-sync
 
-> **给 AI agent 的话**：如果你是被人类丢到这个仓库的 agent——直接读 `skills/hermes-skill-sync/SKILL.md`，或执行下面的安装命令把自己装上。装好后你会知道整套 skill 统一源的接入、安装、更新、修改规范。
+> **给 AI agent 的话**：如果你是被人类丢到这个仓库的 agent——读 `skills/hermes-skill-sync/SKILL.md`，按你的 agent 类型（Hermes / Claude Code / Codex / OpenClaw / 其他）挑对应的 Runbook 执行。装好后你会知道整套 skill 统一源的接入、安装、更新、修改、入源规范。
 
-这是 Hermes Agent **skill 统一源体系的引导仓库**。
+这是 **skill 统一源体系的引导仓库**，面向任何 agent。
 
 - `flowstart/hermes-skills`（私有）= 业务 skill 的**内容真源**
-- 本仓库 = **引导 + 运维规范**（怎么接入、怎么装、怎么改、有哪些坑）
+- 本仓库（公开）= **引导 skill + 一键接入脚本 + 运维规范**
 
 ## 快速接入
 
-> **权限现状**：本仓库已**公开**（匿名可读/clone）；内容仓库 `flowstart/hermes-skills` 仍是**私有**——装它需要 GitHub 凭据，服务器上推荐下面的设备码自助授权。
+**Hermes Agent**
 
 ```bash
 hermes skills tap add flowstart/hermes-skill-sync
 hermes skills tap add flowstart/hermes-skills
 hermes skills install flowstart/hermes-skill-sync/hermes-skill-sync --yes
-# 之后按 skill 里的 Runbook 装 Content skills 并配依赖
+# 之后按 SKILL.md 的 Runbook A 装内容 skill
 ```
 
-完整步骤、依赖配置、验证清单、坑清单 → 见 `skills/hermes-skill-sync/SKILL.md`。
+**Claude Code / Codex / OpenClaw**（一条命令，软链到该 agent 的技能目录，更新只需重跑）
 
-## 非 Hermes Agent 怎么用
+```bash
+git clone https://github.com/flowstart/hermes-skill-sync.git ~/Desktop/GitHub/hermes-skill-sync
+bash ~/Desktop/GitHub/hermes-skill-sync/skills/hermes-skill-sync/scripts/sync.sh --target claude --all   # 或 codex / openclaw
+```
 
-SKILL.md 是开放约定（Anthropic Agent Skills 同源格式），其他 agent 分三种情况：
+**没有技能机制的 agent**：clone 两个仓库，把 `skills/<名>/SKILL.md` 当 runbook 读。
 
-| Agent | 用法 |
-|---|---|
-| **Claude Code / OpenClaw**（认 SKILL.md 格式） | `gh repo clone flowstart/hermes-skill-sync` 后把 `skills/hermes-skill-sync/` 拷进自己的技能目录（Claude Code: `~/.claude/skills/`；OpenClaw: workspace 的 skills/），即被识别加载 |
-| **Codex / 其他无技能机制的 agent** | 不用装——直接把 `skills/hermes-skill-sync/SKILL.md` 当 runbook 读，照着执行（命令是普通 shell + git） |
-| **任何 agent** | 内容 skill 的 `scripts/` 都是纯 Python/CLI，跨 agent 通用；唯一 agent 特有的是 `hermes skills …` 管理命令，其他 agent 用 `git clone` + 手动拷贝等价替代 |
+> 内容仓私有，clone 它需要 GitHub 凭据。服务器上首选 `gh auth login` 设备码：屏幕出 8 位码 → 用户手机打开 https://github.com/login/device 输码，约 30 秒，不碰 token 文件。本仓库公开，不需要凭据。
 
-**权限现状**：本仓库已公开（匿名可 clone/读）；内容仓库 `flowstart/hermes-skills` 仍是私有——装它需要凭据，服务器上推荐 `gh auth login` **设备码自助授权**：agent 在服务器跑登录命令 → 屏幕出 8 位码 → 用户手机打开 https://github.com/login/device 输码确认（约 30 秒，全程不用碰 token 文件）。
+各 agent 的技能目录、参数说明、更新/修改流程、新 skill 入源检查、坑清单、验证清单 → 全在 `skills/hermes-skill-sync/SKILL.md`。
 
 ## 仓库结构
 
 ```
 skills/
 └── hermes-skill-sync/
-    └── SKILL.md     # 引导 skill（tap 只扫 skills/ 一级目录）
+    ├── SKILL.md            # 引导 skill（tap 只扫 skills/ 一级目录）
+    └── scripts/
+        └── sync.sh         # 非 Hermes agent 的一键接入/更新/检查脚本
 ```
 
 ## 为什么单独建一个仓库
 
-引导 skill 和内容 skill 解耦：把本仓库链接丢给任何一台机器上的 agent，它装上引导 skill 后就掌握了整套体系的使用与维护方法——**仓库即说明书，安装即上手**。本仓库不含任何密钥；内容真源仓库保持私有。
+引导和内容解耦：把本仓库链接丢给任何一台机器上的任何 agent，它装上引导 skill 就掌握了整套体系的使用与维护方法——**仓库即说明书，安装即上手**。本仓库不含任何密钥；内容真源保持私有。

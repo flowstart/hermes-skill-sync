@@ -1,85 +1,136 @@
 ---
 name: hermes-skill-sync
-description: 自建 skill 统一源的分发与运维指南（引导 skill）。装了它，agent 就知道如何接入 skill 源（tap add flowstart/hermes-skills）、批量安装、日常更新、修改规范、新增 skill 入源规范，以及全部实测坑（tap 只扫一层/拷贝非链接/私有仓库凭据/raw URL 不可靠/运行依赖配置）。触发词：接入skill源、skill同步、安装skill、hermes-skills、统一真源。
+description: 自建 skill 统一源（flowstart/hermes-skills）的接入与运维引导，面向任何 agent——Hermes、Claude Code、Codex、OpenClaw，或没有技能机制的 agent。装了它就知道：怎么把内容真源接到当前 agent（Hermes 用 tap，其他 agent 用 scripts/sync.sh 一条命令）、怎么更新、怎么改、新 skill 怎么入源、实测坑。触发词：接入skill源、skill同步、安装skill、更新skill、hermes-skills、统一真源、把 xx skill 入源、这台机器怎么装 skill。
 ---
 
-# Hermes Skill 统一源 · 接入与运维
+# Skill 统一源 · 接入与运维
 
-本 skill 是"自建 skill 统一源"体系的**引导入口**。读完并按此执行，任何一台新机器上的 Hermes 都能接入同一套 skill 体系，并且知道日后怎么维护。
+一句话：所有机器、所有 agent 的业务 skill 都从同一个 git 仓库来；改只在工作副本改，各端只拉不改。本文档是接入这套体系的唯一入口，按你的 agent 类型挑对应的 Runbook 执行即可。
 
-## 一、体系架构（两个仓库，各司其职）
+## 一、体系
 
-| 仓库 | 角色 | 内容 |
+| 仓库 | 角色 | 可见性 | 工作副本固定路径 |
+|---|---|---|---|
+| `flowstart/hermes-skill-sync` | 引导 skill（本文档）+ `scripts/sync.sh` | 公开 | `~/Desktop/GitHub/hermes-skill-sync` |
+| `flowstart/hermes-skills` | 内容真源：`skills/<名>/SKILL.md` | 私有 | `~/Desktop/GitHub/hermes-skills` |
+
+**唯一规则**：skill 只在内容仓的工作副本里改 → commit → push → 各端更新。安装到各 agent 的拷贝/软链一律不手改，改了会被下次更新覆盖（Hermes）或直接污染源（软链）。
+
+工作副本路径所有机器统一，脚本和文档都默认它；要换用环境变量 `HERMES_SKILLS_DIR` / `HERMES_SKILL_SYNC_DIR` 覆盖。路径不存在时 `sync.sh` 会自动 clone。
+
+## 二、你是哪种 agent → 走哪条 Runbook
+
+| Agent | 技能目录 | Runbook |
 |---|---|---|
-| `flowstart/hermes-skill-sync`（本仓库，**public**） | **引导 + 规范** | 本 skill：接入方法、运维规范、坑清单 |
-| `flowstart/hermes-skills`（**private**） | **内容真源** | 实际的业务 skill（如抖音博主蒸馏套件） |
+| Hermes Agent | `~/.hermes/skills/`（profile 各自独立） | A：`hermes skills tap` |
+| Claude Code | `~/.claude/skills/` | B：`sync.sh --target claude` |
+| Codex CLI | `~/.codex/skills/`（项目级可用 `.agents/skills/`） | B：`sync.sh --target codex` |
+| OpenClaw | `<workspace>/skills/`（workspace 读 `~/.openclaw/openclaw.json`） | B：`sync.sh --target openclaw` |
+| 没有技能机制的 agent | 无 | C：把 SKILL.md 当 runbook 读 |
 
-两个仓库都要 `tap add`（见下）。skill 的**修改只发生在本地工作副本 → push**，各端只 `update`，**严禁直接改安装拷贝**（会被下次 update 覆盖）。
+Claude Code / Codex 都能识别软链目录（macOS 实测），所以 B 默认用软链：工作副本 `git pull` 之后各端立即生效，不存在"拷贝分叉"。
 
-## 二、新机器接入（Runbook）
+## 三、凭据（内容仓私有，只有这一步需要人）
+
+先看有没有：`gh auth status`。有就跳过。没有：
 
 ```bash
-# 0. 前提：Hermes 已装（hermes --version 可用）；GitHub 凭据（内容仓库私有，必需）
-#    无凭据时的自助授权路径（服务器首选，用户全程不用碰 token 文件）：
-#      gh auth login        # 选 GitHub.com → HTTPS → "Login with a web browser"
-#      屏幕显示 8 位码 → 让用户手机打开 https://github.com/login/device 输码确认
-#    本机已有 gh keyring 时此步自动通过（gh auth token 会被 Hermes 直接读取）
-#    也可用 fine-grained PAT：只勾两个仓库 + Contents:Read，写入 ~/.hermes/.env 的 GH_TOKEN=（值填你的token）
-#    国内服务器先确认 curl -I https://api.github.com 通（不通先配代理）
+gh auth login    # GitHub.com → HTTPS → "Login with a web browser"
+```
 
-# 1. 挂载两个源
+屏幕出 8 位码 → 让用户用手机打开 https://github.com/login/device 输码确认，约 30 秒，全程不碰 token 文件。这是服务器上的首选方式；agent 自己做不了浏览器确认那一步，要明确告诉用户"请输码"。
+
+替代：fine-grained PAT，只勾这两个仓 + Contents:Read。Hermes 放 `~/.hermes/.env` 的 `GH_TOKEN=`；其他 agent 走 `gh auth login --with-token`。国内服务器先确认 `curl -I https://api.github.com` 通。
+
+引导仓是公开的，不需要凭据。
+
+## Runbook A · Hermes
+
+```bash
+hermes --version                                   # 前提
 hermes skills tap add flowstart/hermes-skill-sync
 hermes skills tap add flowstart/hermes-skills
-hermes skills tap list   # 应看到两条
-
-# 2. 验证可发现
-hermes skills search douyin-blogger-distill
-
-# 3. 安装引导 skill（本 skill）+ 需要的内容 skill
+hermes skills tap list                             # 应有两条
+hermes skills search order-quote                   # 验证可发现
 hermes skills install flowstart/hermes-skill-sync/hermes-skill-sync --yes
 hermes skills install flowstart/hermes-skills/<skill名> --yes
-
-# 4. 某 profile 也要用 → 逐个装
-hermes -p <profile名> skills install flowstart/hermes-skills/<skill名> --yes
+hermes -p <profile名> skills install flowstart/hermes-skills/<skill名> --yes   # profile 是独立拷贝，要用就单独装
 ```
 
-### 运行依赖（装完 skill 必须单独配，否则跑不了）
-- **TikHub token**（抖音抓取/下载）：`~/.openclaw/config.json` 加 `"tikhub_api_token": "<向源机器索取>"`
-- **Get笔记**（长视频转录）：`~/.openclaw/openclaw.json` 的 `skills.entries.getnote`（`apiKey` + `env.GETNOTE_CLIENT_ID`）
-- 其他 skill 的依赖看其 SKILL.md 的"配置"小节
+日常：`hermes skills check && hermes skills update`（拉齐）、`hermes skills audit`（审计）、`hermes curator status`（生命周期，永不删除）。
 
-## 三、日常运维
+## Runbook B · Claude Code / Codex / OpenClaw
+
+**第一次（这台机器还没有工作副本）**：
 
 ```bash
-hermes skills check && hermes skills update   # 各端定期拉齐
-hermes skills audit                           # 审计
-hermes curator status                         # 生命周期（归档/备份），永不删除
+git clone https://github.com/flowstart/hermes-skill-sync.git ~/Desktop/GitHub/hermes-skill-sync
+bash ~/Desktop/GitHub/hermes-skill-sync/skills/hermes-skill-sync/scripts/sync.sh --target claude --all
 ```
 
-修改/新增 skill 的唯一正确姿势：
+把 `claude` 换成 `codex` 或 `openclaw` 即可。脚本会：clone/pull 两个工作副本 → 把引导 skill + 选中的 skill 软链到该 agent 的技能目录 → 打印生效方式。目标位置已有同名真实目录时会先备份到 `~/.hermes-skill-sync/backups/`（不放技能目录里，避免重名冲突）再换成软链。
+
+常用参数：
 
 ```bash
-cd <本地工作副本，如 ~/Desktop/GitHub/hermes-skills/skills/<skill名>/>
-# 改 SKILL.md 或 scripts/…
-git add -A && git commit -m "feat: xxx" && git push
-# 然后各端：hermes skills check && hermes skills update
+sync.sh --target codex --skill order-quote          # 只装一个
+sync.sh --target claude --check                     # 只看状态：linked / copied / copied-stale / missing / foreign-link
+sync.sh --target openclaw --all --mode copy         # 软链不方便的环境用拷贝（之后更新要重跑）
+sync.sh --target claude --all --dry-run             # 先看会做什么
+sync.sh --target openclaw --workspace /path/to/ws   # OpenClaw workspace 不在默认位置
 ```
 
-**新增 skill 入源规范**：目录必须放在仓库的 `skills/<skill名>/` **一级位置**（tap 只扫这一层！）；SKILL.md 必填 name/description；实现脚本放该目录 `scripts/`；**通用能力才进源**，单 profile 专属流程留在本地。
+**生效**：Claude Code / Codex 开新会话即可，Codex 也可 `$<skill名>` 显式调用；OpenClaw 重载 workspace。
 
-## 四、坑清单（全部实测踩过）
+**更新**：重跑同一条命令。软链模式下其实 `git -C ~/Desktop/GitHub/hermes-skills pull` 就生效，重跑是为了补上新入源的 skill。
 
-1. **tap 只扫 `skills/` 下的一级目录**——skill 放仓库根目录、或再嵌套类别子目录，都扫不到。
-2. **tap 安装是拷贝不是链接**——没有自动同步，分叉要靠"改源→push→各端 update"治理。
-3. **私有仓库凭据**——raw.githubusercontent.com 直链安装对私有仓库**不可靠**（无鉴权会 404），私有源一律走 `tap add`（走本机 gh/keyring 鉴权）+ 按 identifier 安装。（本引导仓库已公开，raw 直链对它有效；内容仓库私有，照此办理。）
-4. **profile 是独立拷贝**——装到全局层不等于 profile 能用，跨 profile 要 `hermes -p <名> skills install …`。
-5. **装了 ≠ 能跑**——密钥类配置是机器级的，见"运行依赖"。
-6. **安全边界**——community 来源先 `hermes skills inspect` 再装，别随手 `--force`；危险命令还有审批模式兜底。
+**Codex 项目级用法**：某个仓库要带着 skill 走，把 `skills/<名>` 软链进该仓库的 `.agents/skills/`，或在其 `AGENTS.md` 加一行指向工作副本的 SKILL.md。
 
-## 五、接入验证清单
+## Runbook C · 没有技能机制的 agent
 
-- [ ] `hermes skills tap list` 有两个 flowstart 源
-- [ ] `hermes skills search` 能搜到内容 skill
-- [ ] 安装后 `~/.hermes/skills/` 下有 skill 目录（含 scripts/）
-- [ ] 实跑一条核心命令验证（如 `douyin_user_distill.py "<博主主页链接>" --max-works 5` 能出档案）
-- [ ] `hermes skills check && hermes skills update` 正常
+```bash
+git clone https://github.com/flowstart/hermes-skill-sync.git ~/Desktop/GitHub/hermes-skill-sync
+gh repo clone flowstart/hermes-skills ~/Desktop/GitHub/hermes-skills     # 需凭据，见第三节
+```
+
+然后把 `~/Desktop/GitHub/hermes-skills/skills/<名>/SKILL.md` 当 runbook 读，照着执行。内容 skill 的 `scripts/` 都是纯 Python / shell，不依赖任何 agent；`references/`、`assets/` 是相对路径引用，clone 下来就能用。
+
+## 四、修改与新增 skill
+
+```bash
+cd ~/Desktop/GitHub/hermes-skills/skills/<skill名>/
+# 改 SKILL.md / scripts/ / references/ …
+git add -A && git commit -m "feat(<skill名>): xxx" && git push
+# 各端：Hermes → hermes skills check && hermes skills update；其他 → 软链已生效 / 重跑 sync.sh
+```
+
+**新 skill 入源检查（推之前逐条过）**：
+
+1. 目录在仓库 `skills/<名>/` **一级位置**，含 `SKILL.md`，frontmatter 有 `name` 和带触发词的 `description`。tap 只扫这一层，嵌套类别目录扫不到。
+2. **不写死某一台机器的绝对路径**（`~/Desktop/xxx`、`/Users/...`）。确实依赖本机文件的，写明"其他机器没有时怎么降级"，不能因为找不到文件就停。
+3. 不含密钥、token、客户隐私、学号手机号。推前 `grep -rniE "token|secret|api[_-]?key|password" skills/<名>` 一遍。
+4. `references/`、`assets/`、`scripts/` 用相对路径引用；脚本不依赖 agent 特有命令。
+5. **通用能力才进源**；单 profile / 单项目专属流程留在本地。
+6. 至少实跑一次（新会话让 agent 用它完成一个真实任务）。
+7. 内容仓 README 的"收录的 Skill"表加一行。
+
+运行依赖（第三方 token、API key）是机器级配置，看各 skill 自己 SKILL.md 的"配置"小节，不进仓库。
+
+## 五、坑清单（实测）
+
+1. **tap 只扫 `skills/` 一级目录**——放根目录或再嵌一层都扫不到。
+2. **Hermes tap 安装是拷贝不是链接**——各端要主动 `update`；改安装拷贝会被覆盖。
+3. **私有仓 raw 直链不可靠**——无鉴权 404。私有源走 `tap add`（用本机 gh 凭据）或 `sync.sh`（用 gh clone）。引导仓公开，raw 直链对它有效。
+4. **Hermes profile 是独立拷贝**——全局装了 ≠ profile 能用，要 `hermes -p <名> skills install`。
+5. **装了 ≠ 能跑**——密钥类配置是机器级的。
+6. **备份不要放技能目录里**——`~/.claude/skills/xxx.bak/` 里的 SKILL.md 会被当成同名 skill 加载。`sync.sh` 的备份在 `~/.hermes-skill-sync/backups/`。
+7. **软链模式下工作副本就是活的源**——在 `~/.claude/skills/<名>/` 里改文件等于改工作副本，改完记得 commit + push，否则其他机器拿不到。
+8. **community 来源先 `hermes skills inspect` 再装**，别随手 `--force`。
+
+## 六、接入验证清单
+
+- [ ] 两个工作副本存在，`git -C <路径> status` 干净
+- [ ] Hermes：`hermes skills tap list` 两条 flowstart 源，`hermes skills search <skill名>` 能搜到，`~/.hermes/skills/<名>/` 存在
+- [ ] 其他 agent：`sync.sh --target <agent> --check` 全部 `linked`（或 `copied`）
+- [ ] 开新会话，agent 的 skill 列表里能看到装的 skill；给它一个该 skill 描述里的触发句，它会用
+- [ ] 实跑该 skill 的一个最小任务（各 skill 自述里有）

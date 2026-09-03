@@ -18,6 +18,18 @@ hermes skills install flowstart/hermes-skill-sync/hermes-skill-sync --yes
 
 完整步骤、依赖配置、验证清单、坑清单 → 见 `skills/hermes-skill-sync/SKILL.md`。
 
+## 非 Hermes Agent 怎么用
+
+SKILL.md 是开放约定（Anthropic Agent Skills 同源格式），其他 agent 分三种情况：
+
+| Agent | 用法 |
+|---|---|
+| **Claude Code / OpenClaw**（认 SKILL.md 格式） | `gh repo clone flowstart/hermes-skill-sync` 后把 `skills/hermes-skill-sync/` 拷进自己的技能目录（Claude Code: `~/.claude/skills/`；OpenClaw: workspace 的 skills/），即被识别加载 |
+| **Codex / 其他无技能机制的 agent** | 不用装——直接把 `skills/hermes-skill-sync/SKILL.md` 当 runbook 读，照着执行（命令是普通 shell + git） |
+| **任何 agent** | 内容 skill 的 `scripts/` 都是纯 Python/CLI，跨 agent 通用；唯一 agent 特有的是 `hermes skills …` 管理命令，其他 agent 用 `git clone` + 手动拷贝等价替代 |
+
+**前提**：仓库是私有的，对方机器需先 `gh auth login`（或配 PAT）。把本仓库转公开可免去这一步（本仓库不含任何密钥）。
+
 ## 仓库结构
 
 ```
